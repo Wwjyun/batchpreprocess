@@ -12,8 +12,9 @@ without resizing the output dimensions.
 - Batch-process supported image files while preserving relative folder structure.
 - Keep output width and height unchanged.
 - Normalize non-uint8 sources to uint8 for annotation visibility.
+- Read images through Pillow with large-image pixel limits disabled, then convert to OpenCV arrays.
 - Optional per-image metadata JSON under `preprocess_meta/`.
-- Unicode Windows path support through OpenCV buffer-based IO.
+- Unicode Windows path support through Pillow reading and OpenCV encoded writing.
 
 Supported input extensions:
 

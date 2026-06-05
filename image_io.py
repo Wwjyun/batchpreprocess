@@ -6,19 +6,42 @@ os.environ.setdefault("OPENCV_IO_MAX_IMAGE_PIXELS", str(2**40))
 
 import cv2
 import numpy as np
+from PIL import Image, ImageOps
 from PySide6.QtGui import QImage, QPixmap
 
 from image_processing import ensure_uint8_for_annotation
 
+Image.MAX_IMAGE_PIXELS = None
+
 
 class ImageIO:
-    """OpenCV image IO helpers with Windows Unicode path support."""
+    """Image IO helpers with Pillow reading and OpenCV writing."""
 
     def read(self, path: str):
-        data = np.fromfile(path, dtype=np.uint8)
-        if data.size == 0:
+        try:
+            with Image.open(path) as pil_img:
+                pil_img = ImageOps.exif_transpose(pil_img)
+                return self._pil_to_cv(pil_img)
+        except Exception:
             return None
-        return cv2.imdecode(data, cv2.IMREAD_UNCHANGED)
+
+    def _pil_to_cv(self, pil_img: Image.Image) -> np.ndarray:
+        mode = pil_img.mode
+
+        if mode in {"RGB", "RGBA", "L", "I", "I;16", "I;16B", "I;16L", "F"}:
+            arr = np.array(pil_img)
+        elif mode == "P" and "transparency" in pil_img.info:
+            arr = np.array(pil_img.convert("RGBA"))
+            mode = "RGBA"
+        else:
+            arr = np.array(pil_img.convert("RGB"))
+            mode = "RGB"
+
+        if arr.ndim == 3 and mode == "RGB":
+            return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        if arr.ndim == 3 and mode == "RGBA":
+            return cv2.cvtColor(arr, cv2.COLOR_RGBA2BGRA)
+        return arr
 
     def write(self, path: str, img: np.ndarray, params=None) -> bool:
         ext = Path(path).suffix
