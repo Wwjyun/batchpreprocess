@@ -14,7 +14,16 @@ class ImagePreprocessor:
 
     def process(self, img: np.ndarray, params: PreprocessParams) -> np.ndarray:
         out = self.ensure_uint8_for_annotation(img)
-        out = cv2.convertScaleAbs(out, alpha=float(params.contrast), beta=int(params.brightness))
+        if params.processing_mode == "xnview":
+            out = self.apply_xnview_brightness_contrast(
+                out,
+                int(params.xnview_brightness),
+                int(params.xnview_contrast),
+            )
+        elif params.processing_mode == "auto":
+            out = self.apply_auto_levels(out, float(params.auto_clip_percent))
+        else:
+            out = cv2.convertScaleAbs(out, alpha=float(params.contrast), beta=int(params.brightness))
         out = self.apply_gamma(out, float(params.gamma))
 
         if params.use_clahe:
@@ -65,6 +74,45 @@ class ImagePreprocessor:
         inv_gamma = 1.0 / gamma
         lut = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)], dtype=np.uint8)
         return cv2.LUT(img, lut)
+
+    @staticmethod
+    def apply_xnview_brightness_contrast(img: np.ndarray, brightness: int, contrast: int) -> np.ndarray:
+        brightness = int(np.clip(brightness, -255, 255))
+        contrast = int(np.clip(contrast, -255, 255))
+        factor = (259.0 * (contrast + 255.0)) / (255.0 * (259.0 - contrast))
+
+        base = img[:, :, :3] if img.ndim == 3 and img.shape[2] == 4 else img
+        adjusted = factor * (base.astype(np.float32) - 128.0) + 128.0 + brightness
+        adjusted = np.clip(adjusted, 0, 255).astype(np.uint8)
+
+        if img.ndim == 3 and img.shape[2] == 4:
+            return cv2.merge([adjusted[:, :, 0], adjusted[:, :, 1], adjusted[:, :, 2], img[:, :, 3]])
+        return adjusted
+
+    @staticmethod
+    def apply_auto_levels(img: np.ndarray, clip_percent: float) -> np.ndarray:
+        clip_percent = float(np.clip(clip_percent, 0.0, 20.0))
+        base = img[:, :, :3] if img.ndim == 3 and img.shape[2] == 4 else img
+
+        if base.ndim == 2:
+            gray = base
+        elif base.ndim == 3 and base.shape[2] >= 3:
+            gray = cv2.cvtColor(base[:, :, :3], cv2.COLOR_BGR2GRAY)
+        else:
+            gray = base
+
+        low = float(np.percentile(gray, clip_percent))
+        high = float(np.percentile(gray, 100.0 - clip_percent))
+        if high <= low:
+            return img.copy()
+
+        scale = 255.0 / (high - low)
+        adjusted = (base.astype(np.float32) - low) * scale
+        adjusted = np.clip(adjusted, 0, 255).astype(np.uint8)
+
+        if img.ndim == 3 and img.shape[2] == 4:
+            return cv2.merge([adjusted[:, :, 0], adjusted[:, :, 1], adjusted[:, :, 2], img[:, :, 3]])
+        return adjusted
 
     def apply_clahe(self, img: np.ndarray, clip_limit: float, tile_grid_size: int) -> np.ndarray:
         tile_grid_size = max(2, int(tile_grid_size))

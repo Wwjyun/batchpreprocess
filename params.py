@@ -3,8 +3,12 @@ from dataclasses import dataclass
 
 @dataclass
 class PreprocessParams:
+    processing_mode: str = "opencv"
     brightness: int = 0
     contrast: float = 1.0
+    xnview_brightness: int = 0
+    xnview_contrast: int = 0
+    auto_clip_percent: float = 1.0
     gamma: float = 1.0
     use_clahe: bool = False
     clahe_clip_limit: float = 2.0

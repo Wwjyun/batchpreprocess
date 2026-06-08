@@ -95,6 +95,15 @@ class MainWindow(QMainWindow):
         params_layout = QGridLayout(params_group)
         row = 0
 
+        self.processing_mode = QComboBox()
+        self.processing_mode.addItem("一般手動", "opencv")
+        self.processing_mode.addItem("XnView 手動", "xnview")
+        self.processing_mode.addItem("自動亮度/對比校正", "auto")
+        self.processing_mode.currentIndexChanged.connect(self.on_processing_mode_changed)
+        params_layout.addWidget(QLabel("校正模式"), row, 0)
+        params_layout.addWidget(self.processing_mode, row, 1, 1, 2)
+        row += 1
+
         self.brightness = QSpinBox()
         self.brightness.setRange(-255, 255)
         self.brightness.setValue(0)
@@ -125,6 +134,38 @@ class MainWindow(QMainWindow):
         row += 1
         params_layout.addWidget(QLabel("伽瑪值"), row, 0)
         params_layout.addWidget(self.gamma, row, 1, 1, 2)
+        row += 1
+
+        self.xnview_brightness = QSpinBox()
+        self.xnview_brightness.setRange(-255, 255)
+        self.xnview_brightness.setValue(0)
+        self.xnview_contrast = QSpinBox()
+        self.xnview_contrast.setRange(-255, 255)
+        self.xnview_contrast.setValue(0)
+        self.xnview_contrast_slider = QSlider(Qt.Horizontal)
+        self.xnview_contrast_slider.setRange(-255, 255)
+        self.xnview_contrast_slider.setSingleStep(1)
+        self.xnview_contrast_slider.setPageStep(10)
+        self.xnview_contrast_slider.setValue(0)
+        self.xnview_brightness.valueChanged.connect(self.update_preview)
+        self.xnview_contrast.valueChanged.connect(self.on_xnview_contrast_spin_changed)
+        self.xnview_contrast_slider.valueChanged.connect(self.on_xnview_contrast_slider_changed)
+        params_layout.addWidget(QLabel("XnView 亮度"), row, 0)
+        params_layout.addWidget(self.xnview_brightness, row, 1, 1, 2)
+        row += 1
+        params_layout.addWidget(QLabel("XnView 對比度"), row, 0)
+        params_layout.addWidget(self.xnview_contrast_slider, row, 1)
+        params_layout.addWidget(self.xnview_contrast, row, 2)
+        row += 1
+
+        self.auto_clip_percent = QDoubleSpinBox()
+        self.auto_clip_percent.setRange(0.0, 20.0)
+        self.auto_clip_percent.setDecimals(2)
+        self.auto_clip_percent.setSingleStep(0.25)
+        self.auto_clip_percent.setValue(1.0)
+        self.auto_clip_percent.valueChanged.connect(self.update_preview)
+        params_layout.addWidget(QLabel("自動裁切百分比"), row, 0)
+        params_layout.addWidget(self.auto_clip_percent, row, 1, 1, 2)
         row += 1
 
         self.use_clahe = QCheckBox("啟用 CLAHE 局部對比增強")
@@ -276,8 +317,12 @@ class MainWindow(QMainWindow):
 
     def params(self) -> PreprocessParams:
         return PreprocessParams(
+            processing_mode=self.processing_mode.currentData(),
             brightness=self.brightness.value(),
             contrast=self.contrast.value(),
+            xnview_brightness=self.xnview_brightness.value(),
+            xnview_contrast=self.xnview_contrast.value(),
+            auto_clip_percent=self.auto_clip_percent.value(),
             gamma=self.gamma.value(),
             use_clahe=self.use_clahe.isChecked(),
             clahe_clip_limit=self.clahe_clip.value(),
@@ -314,6 +359,23 @@ class MainWindow(QMainWindow):
             self.contrast.blockSignals(True)
             self.contrast.setValue(spin_value)
             self.contrast.blockSignals(False)
+        self.update_preview()
+
+    def on_xnview_contrast_spin_changed(self, value):
+        if self.xnview_contrast_slider.value() != value:
+            self.xnview_contrast_slider.blockSignals(True)
+            self.xnview_contrast_slider.setValue(value)
+            self.xnview_contrast_slider.blockSignals(False)
+        self.update_preview()
+
+    def on_xnview_contrast_slider_changed(self, value):
+        if self.xnview_contrast.value() != value:
+            self.xnview_contrast.blockSignals(True)
+            self.xnview_contrast.setValue(value)
+            self.xnview_contrast.blockSignals(False)
+        self.update_preview()
+
+    def on_processing_mode_changed(self):
         self.update_preview()
 
     def choose_input(self):
