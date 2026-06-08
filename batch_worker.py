@@ -51,7 +51,7 @@ class BatchWorker(QThread):
 
         for idx, src in enumerate(self.files, start=1):
             if self._cancel:
-                self.log.emit("Batch canceled by user.")
+                self.log.emit("批次處理已由使用者取消。")
                 break
 
             src_path = Path(src)
@@ -66,14 +66,14 @@ class BatchWorker(QThread):
 
             self.progress.emit(idx, len(self.files), src_path.name)
             if dst_path.exists() and not self.overwrite:
-                self.log.emit(f"Skipped existing file: {dst_path}")
+                self.log.emit(f"略過既有檔案：{dst_path}")
                 continue
 
             try:
                 t0 = time.time()
                 img = self.image_io.read(str(src_path))
                 if img is None:
-                    raise RuntimeError("Could not read image.")
+                    raise RuntimeError("無法讀取影像。")
 
                 src_h, src_w = img.shape[:2]
                 out = self.preprocessor.process(img, self.params)
@@ -81,16 +81,16 @@ class BatchWorker(QThread):
 
                 encode_params = self._encode_params()
                 if not self.image_io.write(str(dst_path), out, encode_params):
-                    raise RuntimeError("Could not write image.")
+                    raise RuntimeError("無法寫入影像。")
 
                 if self.save_meta:
                     self._write_metadata(meta_dir, dst_rel, src_path, dst_path, img, out, src_w, src_h, out_w, out_h, t0)
 
                 ok_count += 1
-                self.log.emit(f"Saved: {dst_path} | size {src_w}x{src_h} -> {out_w}x{out_h}")
+                self.log.emit(f"已儲存：{dst_path} | 尺寸 {src_w}x{src_h} -> {out_w}x{out_h}")
             except Exception as exc:
                 fail_count += 1
-                self.log.emit(f"Failed: {src_path} | {exc}")
+                self.log.emit(f"處理失敗：{src_path} | {exc}")
 
         self.finished_ok.emit(ok_count, fail_count)
 
