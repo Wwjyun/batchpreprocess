@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSplitter,
     QSpinBox,
@@ -69,7 +70,10 @@ class MainWindow(QMainWindow):
 
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        left_panel.setMinimumWidth(420)
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setWidget(left_panel)
+        left_scroll.setMinimumWidth(460)
 
         path_group = QGroupBox("資料夾")
         path_layout = QGridLayout(path_group)
@@ -243,6 +247,217 @@ class MainWindow(QMainWindow):
         params_layout.addWidget(self.sharpen_amount, row, 1)
         row += 1
 
+        threshold_group = QGroupBox("二值化")
+        threshold_layout = QGridLayout(threshold_group)
+        trow = 0
+        self.use_threshold = QCheckBox("啟用二值化")
+        self.threshold_mode = QComboBox()
+        self.threshold_mode.addItem("固定閾值", "fixed")
+        self.threshold_mode.addItem("OTSU", "otsu")
+        self.threshold_mode.addItem("自適應", "adaptive")
+        self.threshold_value = QSpinBox()
+        self.threshold_value.setRange(0, 255)
+        self.threshold_value.setValue(128)
+        self.threshold_invert = QCheckBox("反相")
+        self.adaptive_method = QComboBox()
+        self.adaptive_method.addItem("Gaussian", "gaussian")
+        self.adaptive_method.addItem("Mean", "mean")
+        self.adaptive_block = QSpinBox()
+        self.adaptive_block.setRange(3, 255)
+        self.adaptive_block.setSingleStep(2)
+        self.adaptive_block.setValue(31)
+        self.adaptive_c = QSpinBox()
+        self.adaptive_c.setRange(-50, 50)
+        self.adaptive_c.setValue(5)
+        threshold_layout.addWidget(self.use_threshold, trow, 0, 1, 2)
+        trow += 1
+        threshold_layout.addWidget(QLabel("模式"), trow, 0)
+        threshold_layout.addWidget(self.threshold_mode, trow, 1)
+        trow += 1
+        threshold_layout.addWidget(QLabel("固定閾值"), trow, 0)
+        threshold_layout.addWidget(self.threshold_value, trow, 1)
+        trow += 1
+        threshold_layout.addWidget(QLabel("自適應方法"), trow, 0)
+        threshold_layout.addWidget(self.adaptive_method, trow, 1)
+        trow += 1
+        threshold_layout.addWidget(QLabel("區塊大小"), trow, 0)
+        threshold_layout.addWidget(self.adaptive_block, trow, 1)
+        trow += 1
+        threshold_layout.addWidget(QLabel("C 值"), trow, 0)
+        threshold_layout.addWidget(self.adaptive_c, trow, 1)
+        trow += 1
+        threshold_layout.addWidget(self.threshold_invert, trow, 0, 1, 2)
+        params_layout.addWidget(threshold_group, row, 0, 1, 3)
+        row += 1
+
+        edge_group = QGroupBox("抓邊界")
+        edge_layout = QGridLayout(edge_group)
+        erow = 0
+        self.use_edge_detection = QCheckBox("啟用 Canny 邊界")
+        self.canny_low = QSpinBox()
+        self.canny_low.setRange(0, 255)
+        self.canny_low.setValue(50)
+        self.canny_high = QSpinBox()
+        self.canny_high.setRange(1, 255)
+        self.canny_high.setValue(150)
+        self.canny_aperture = QSpinBox()
+        self.canny_aperture.setRange(3, 7)
+        self.canny_aperture.setSingleStep(2)
+        self.canny_aperture.setValue(3)
+        edge_layout.addWidget(self.use_edge_detection, erow, 0, 1, 2)
+        erow += 1
+        edge_layout.addWidget(QLabel("低閾值"), erow, 0)
+        edge_layout.addWidget(self.canny_low, erow, 1)
+        erow += 1
+        edge_layout.addWidget(QLabel("高閾值"), erow, 0)
+        edge_layout.addWidget(self.canny_high, erow, 1)
+        erow += 1
+        edge_layout.addWidget(QLabel("孔徑"), erow, 0)
+        edge_layout.addWidget(self.canny_aperture, erow, 1)
+        params_layout.addWidget(edge_group, row, 0, 1, 3)
+        row += 1
+
+        shape_group = QGroupBox("形狀偵測")
+        shape_layout = QGridLayout(shape_group)
+        srow = 0
+        self.use_shape_detection = QCheckBox("啟用輪廓形狀偵測")
+        self.contour_min_area = QSpinBox()
+        self.contour_min_area.setRange(0, 100000000)
+        self.contour_min_area.setValue(50)
+        self.contour_max_area = QSpinBox()
+        self.contour_max_area.setRange(1, 100000000)
+        self.contour_max_area.setValue(1000000)
+        self.approx_epsilon = QDoubleSpinBox()
+        self.approx_epsilon.setRange(0.1, 20.0)
+        self.approx_epsilon.setSingleStep(0.1)
+        self.approx_epsilon.setValue(2.0)
+        self.use_subpixel = QCheckBox("啟用亞像素精度")
+        self.subpixel_window = QSpinBox()
+        self.subpixel_window.setRange(1, 31)
+        self.subpixel_window.setValue(5)
+        shape_layout.addWidget(self.use_shape_detection, srow, 0, 1, 3)
+        srow += 1
+        shape_layout.addWidget(QLabel("最小面積"), srow, 0)
+        shape_layout.addWidget(self.contour_min_area, srow, 1)
+        shape_layout.addWidget(QLabel("最大面積"), srow, 2)
+        shape_layout.addWidget(self.contour_max_area, srow, 3)
+        srow += 1
+        shape_layout.addWidget(QLabel("近似誤差 %"), srow, 0)
+        shape_layout.addWidget(self.approx_epsilon, srow, 1)
+        shape_layout.addWidget(self.use_subpixel, srow, 2)
+        shape_layout.addWidget(self.subpixel_window, srow, 3)
+        srow += 1
+
+        self.detect_rectangles = QCheckBox("矩形")
+        self.detect_rectangles.setChecked(True)
+        self.rect_min_width = QDoubleSpinBox()
+        self.rect_min_width.setRange(0.0, 100000.0)
+        self.rect_min_width.setValue(5.0)
+        self.rect_max_width = QDoubleSpinBox()
+        self.rect_max_width.setRange(0.0, 100000.0)
+        self.rect_max_width.setValue(100000.0)
+        self.rect_min_height = QDoubleSpinBox()
+        self.rect_min_height.setRange(0.0, 100000.0)
+        self.rect_min_height.setValue(5.0)
+        self.rect_max_height = QDoubleSpinBox()
+        self.rect_max_height.setRange(0.0, 100000.0)
+        self.rect_max_height.setValue(100000.0)
+        self.rect_min_aspect = QDoubleSpinBox()
+        self.rect_min_aspect.setRange(0.01, 100.0)
+        self.rect_min_aspect.setValue(0.1)
+        self.rect_max_aspect = QDoubleSpinBox()
+        self.rect_max_aspect.setRange(0.01, 100.0)
+        self.rect_max_aspect.setValue(10.0)
+        shape_layout.addWidget(self.detect_rectangles, srow, 0)
+        shape_layout.addWidget(QLabel("寬"), srow, 1)
+        shape_layout.addWidget(self.rect_min_width, srow, 2)
+        shape_layout.addWidget(self.rect_max_width, srow, 3)
+        srow += 1
+        shape_layout.addWidget(QLabel("矩形高"), srow, 1)
+        shape_layout.addWidget(self.rect_min_height, srow, 2)
+        shape_layout.addWidget(self.rect_max_height, srow, 3)
+        srow += 1
+        shape_layout.addWidget(QLabel("長寬比"), srow, 1)
+        shape_layout.addWidget(self.rect_min_aspect, srow, 2)
+        shape_layout.addWidget(self.rect_max_aspect, srow, 3)
+        srow += 1
+
+        self.detect_circles = QCheckBox("圓形")
+        self.detect_circles.setChecked(True)
+        self.circle_min_radius = QDoubleSpinBox()
+        self.circle_min_radius.setRange(0.0, 100000.0)
+        self.circle_min_radius.setValue(3.0)
+        self.circle_max_radius = QDoubleSpinBox()
+        self.circle_max_radius.setRange(0.0, 100000.0)
+        self.circle_max_radius.setValue(100000.0)
+        self.circle_min_circularity = QDoubleSpinBox()
+        self.circle_min_circularity.setRange(0.01, 1.0)
+        self.circle_min_circularity.setSingleStep(0.05)
+        self.circle_min_circularity.setValue(0.75)
+        shape_layout.addWidget(self.detect_circles, srow, 0)
+        shape_layout.addWidget(QLabel("半徑"), srow, 1)
+        shape_layout.addWidget(self.circle_min_radius, srow, 2)
+        shape_layout.addWidget(self.circle_max_radius, srow, 3)
+        srow += 1
+        shape_layout.addWidget(QLabel("圓度下限"), srow, 1)
+        shape_layout.addWidget(self.circle_min_circularity, srow, 2)
+        srow += 1
+
+        self.detect_polygons = QCheckBox("多邊形")
+        self.detect_polygons.setChecked(True)
+        self.polygon_min_vertices = QSpinBox()
+        self.polygon_min_vertices.setRange(3, 100)
+        self.polygon_min_vertices.setValue(3)
+        self.polygon_max_vertices = QSpinBox()
+        self.polygon_max_vertices.setRange(3, 100)
+        self.polygon_max_vertices.setValue(12)
+        shape_layout.addWidget(self.detect_polygons, srow, 0)
+        shape_layout.addWidget(QLabel("頂點數"), srow, 1)
+        shape_layout.addWidget(self.polygon_min_vertices, srow, 2)
+        shape_layout.addWidget(self.polygon_max_vertices, srow, 3)
+        params_layout.addWidget(shape_group, row, 0, 1, 3)
+        row += 1
+
+        for widget in [
+            self.use_threshold,
+            self.threshold_mode,
+            self.threshold_value,
+            self.threshold_invert,
+            self.adaptive_method,
+            self.adaptive_block,
+            self.adaptive_c,
+            self.use_edge_detection,
+            self.canny_low,
+            self.canny_high,
+            self.canny_aperture,
+            self.use_shape_detection,
+            self.contour_min_area,
+            self.contour_max_area,
+            self.approx_epsilon,
+            self.use_subpixel,
+            self.subpixel_window,
+            self.detect_rectangles,
+            self.rect_min_width,
+            self.rect_max_width,
+            self.rect_min_height,
+            self.rect_max_height,
+            self.rect_min_aspect,
+            self.rect_max_aspect,
+            self.detect_circles,
+            self.circle_min_radius,
+            self.circle_max_radius,
+            self.circle_min_circularity,
+            self.detect_polygons,
+            self.polygon_min_vertices,
+            self.polygon_max_vertices,
+        ]:
+            if isinstance(widget, QComboBox):
+                widget.currentIndexChanged.connect(self.update_preview)
+            elif isinstance(widget, QCheckBox):
+                widget.stateChanged.connect(self.update_preview)
+            else:
+                widget.valueChanged.connect(self.update_preview)
+
         self.output_format = QComboBox()
         self.output_format.addItems(["png", "jpg", "bmp", "tif"])
         self.jpeg_quality = QSpinBox()
@@ -316,7 +531,7 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(QLabel("紀錄"))
         right_layout.addWidget(self.log_box)
 
-        main_layout.addWidget(left_panel)
+        main_layout.addWidget(left_scroll)
         main_layout.addWidget(right_panel, stretch=1)
 
     def params(self) -> PreprocessParams:
@@ -341,6 +556,37 @@ class MainWindow(QMainWindow):
             bilateral_d=self.bilateral_d.value(),
             bilateral_sigma_color=self.bilateral_sc.value(),
             bilateral_sigma_space=self.bilateral_ss.value(),
+            use_threshold=self.use_threshold.isChecked(),
+            threshold_mode=self.threshold_mode.currentData(),
+            threshold_value=self.threshold_value.value(),
+            threshold_invert=self.threshold_invert.isChecked(),
+            adaptive_method=self.adaptive_method.currentData(),
+            adaptive_block_size=ImagePreprocessor.odd_ksize(self.adaptive_block.value()),
+            adaptive_c=self.adaptive_c.value(),
+            use_edge_detection=self.use_edge_detection.isChecked(),
+            canny_low=self.canny_low.value(),
+            canny_high=self.canny_high.value(),
+            canny_aperture_size=ImagePreprocessor.odd_ksize(self.canny_aperture.value()),
+            use_shape_detection=self.use_shape_detection.isChecked(),
+            contour_min_area=self.contour_min_area.value(),
+            contour_max_area=self.contour_max_area.value(),
+            approx_epsilon_percent=self.approx_epsilon.value(),
+            use_subpixel_refine=self.use_subpixel.isChecked(),
+            subpixel_window=self.subpixel_window.value(),
+            detect_rectangles=self.detect_rectangles.isChecked(),
+            rect_min_width=self.rect_min_width.value(),
+            rect_max_width=self.rect_max_width.value(),
+            rect_min_height=self.rect_min_height.value(),
+            rect_max_height=self.rect_max_height.value(),
+            rect_min_aspect=self.rect_min_aspect.value(),
+            rect_max_aspect=self.rect_max_aspect.value(),
+            detect_circles=self.detect_circles.isChecked(),
+            circle_min_radius=self.circle_min_radius.value(),
+            circle_max_radius=self.circle_max_radius.value(),
+            circle_min_circularity=self.circle_min_circularity.value(),
+            detect_polygons=self.detect_polygons.isChecked(),
+            polygon_min_vertices=self.polygon_min_vertices.value(),
+            polygon_max_vertices=self.polygon_max_vertices.value(),
             output_format=self.output_format.currentText(),
             jpeg_quality=self.jpeg_quality.value(),
             png_compression=self.png_compression.value(),

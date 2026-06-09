@@ -50,6 +50,23 @@ class ImagePreprocessor:
         if params.use_sharpen:
             out = self.apply_sharpen(out, params.sharpen_amount)
 
+        binary = None
+        if params.use_threshold:
+            binary = self.apply_threshold(out, params)
+            out = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+
+        edges = None
+        if params.use_edge_detection:
+            source = binary if binary is not None else self.to_gray(out)
+            edges = self.apply_canny(source, params)
+            out = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+
+        if params.use_shape_detection:
+            source = edges if edges is not None else binary
+            if source is None:
+                source = self.apply_threshold(out, params)
+            out = self.draw_detected_shapes(out, source, params)
+
         return out
 
     @staticmethod
@@ -145,6 +162,132 @@ class ImagePreprocessor:
             return img
         blurred = cv2.GaussianBlur(img, (0, 0), 1.0)
         return cv2.addWeighted(img, 1.0 + amount, blurred, -amount, 0)
+
+    @staticmethod
+    def to_gray(img: np.ndarray) -> np.ndarray:
+        if img.ndim == 2:
+            return img
+        if img.ndim == 3 and img.shape[2] == 4:
+            return cv2.cvtColor(img, cv2.COLOR_BGRA2GRAY)
+        return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    def apply_threshold(self, img: np.ndarray, params: PreprocessParams) -> np.ndarray:
+        gray = self.to_gray(self.ensure_uint8_for_annotation(img))
+        mode = params.threshold_mode
+        threshold_type = cv2.THRESH_BINARY_INV if params.threshold_invert else cv2.THRESH_BINARY
+
+        if mode == "adaptive":
+            block_size = self.odd_ksize(params.adaptive_block_size)
+            block_size = max(3, block_size)
+            method = cv2.ADAPTIVE_THRESH_MEAN_C
+            if params.adaptive_method == "gaussian":
+                method = cv2.ADAPTIVE_THRESH_GAUSSIAN_C
+            return cv2.adaptiveThreshold(
+                gray,
+                255,
+                method,
+                threshold_type,
+                block_size,
+                int(params.adaptive_c),
+            )
+
+        if mode == "otsu":
+            _, binary = cv2.threshold(gray, 0, 255, threshold_type | cv2.THRESH_OTSU)
+            return binary
+
+        value = int(np.clip(params.threshold_value, 0, 255))
+        _, binary = cv2.threshold(gray, value, 255, threshold_type)
+        return binary
+
+    def apply_canny(self, img: np.ndarray, params: PreprocessParams) -> np.ndarray:
+        gray = self.to_gray(self.ensure_uint8_for_annotation(img))
+        aperture = self.odd_ksize(params.canny_aperture_size)
+        aperture = int(np.clip(aperture, 3, 7))
+        low = int(np.clip(params.canny_low, 0, 255))
+        high = int(np.clip(params.canny_high, low + 1, 255))
+        return cv2.Canny(gray, low, high, apertureSize=aperture, L2gradient=True)
+
+    def draw_detected_shapes(self, img: np.ndarray, source: np.ndarray, params: PreprocessParams) -> np.ndarray:
+        if img.ndim == 2:
+            canvas = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        elif img.ndim == 3 and img.shape[2] == 4:
+            canvas = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+        else:
+            canvas = img.copy()
+
+        contours, _ = cv2.findContours(source, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        gray = self.to_gray(canvas)
+        for contour in contours:
+            area = float(cv2.contourArea(contour))
+            if area < params.contour_min_area or area > params.contour_max_area:
+                continue
+
+            contour = self.refine_contour_subpixel(contour, gray, params)
+            perimeter = cv2.arcLength(contour, True)
+            if perimeter <= 0:
+                continue
+
+            approx = cv2.approxPolyDP(contour, perimeter * float(params.approx_epsilon_percent) / 100.0, True)
+
+            if params.detect_rectangles and self.is_rectangle(contour, params):
+                box = cv2.boxPoints(cv2.minAreaRect(contour)).astype(np.int32)
+                cv2.drawContours(canvas, [box], 0, (0, 255, 0), 2)
+
+            if params.detect_circles:
+                circle = self.match_circle(contour, area, params)
+                if circle is not None:
+                    (x, y), radius = circle
+                    cv2.circle(canvas, (int(round(x)), int(round(y))), int(round(radius)), (255, 0, 0), 2)
+
+            if params.detect_polygons and self.is_polygon(approx, params):
+                cv2.polylines(canvas, [approx.astype(np.int32)], True, (0, 255, 255), 2)
+
+        return canvas
+
+    @staticmethod
+    def refine_contour_subpixel(contour: np.ndarray, gray: np.ndarray, params: PreprocessParams) -> np.ndarray:
+        if not params.use_subpixel_refine or len(contour) < 3:
+            return contour
+        points = contour.astype(np.float32)
+        win = max(1, int(params.subpixel_window))
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
+        try:
+            cv2.cornerSubPix(gray, points, (win, win), (-1, -1), criteria)
+            return points
+        except cv2.error:
+            return contour
+
+    @staticmethod
+    def is_rectangle(contour: np.ndarray, params: PreprocessParams) -> bool:
+        (_, _), (width, height), _ = cv2.minAreaRect(contour)
+        width, height = float(width), float(height)
+        if width <= 0 or height <= 0:
+            return False
+        short, long = sorted((width, height))
+        aspect = long / short
+        return (
+            params.rect_min_width <= width <= params.rect_max_width
+            and params.rect_min_height <= height <= params.rect_max_height
+            and params.rect_min_aspect <= aspect <= params.rect_max_aspect
+        )
+
+    @staticmethod
+    def match_circle(contour: np.ndarray, area: float, params: PreprocessParams):
+        (x, y), radius = cv2.minEnclosingCircle(contour)
+        if radius <= 0:
+            return None
+        circularity = area / (np.pi * radius * radius)
+        if (
+            params.circle_min_radius <= radius <= params.circle_max_radius
+            and circularity >= params.circle_min_circularity
+        ):
+            return (x, y), radius
+        return None
+
+    @staticmethod
+    def is_polygon(approx: np.ndarray, params: PreprocessParams) -> bool:
+        vertices = len(approx)
+        return params.polygon_min_vertices <= vertices <= params.polygon_max_vertices
 
     @staticmethod
     def odd_ksize(value: int) -> int:
