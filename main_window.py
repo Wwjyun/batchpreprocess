@@ -30,6 +30,7 @@ from batch_worker import BatchWorker
 from image_io import ImageIO, PixmapConverter
 from image_processing import ImagePreprocessor
 from params import PreprocessParams
+from preview_worker import PreviewWorker
 
 SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 
@@ -55,6 +56,9 @@ class MainWindow(QMainWindow):
         self.current_img = None
         self.current_file = None
         self.worker = None
+        self.preview_worker = None
+        self.preview_request_id = 0
+        self.preview_pending = False
 
         self.build_ui()
 
@@ -433,16 +437,56 @@ class MainWindow(QMainWindow):
     def update_preview(self):
         if self.current_img is None:
             return
-        try:
-            out = self.preprocessor.process(self.current_img, self.params())
-            h, w = out.shape[:2]
+        self.preview_request_id += 1
+        self.start_preview_worker()
+
+    def start_preview_worker(self):
+        if self.current_img is None:
+            return
+
+        if self.preview_worker and self.preview_worker.isRunning():
+            self.preview_pending = True
+            return
+
+        self.preview_pending = False
+        self.preview_worker = PreviewWorker(
+            self.preview_request_id,
+            self.current_img,
+            self.params(),
+            self.proc_label.width() - 20,
+            self.proc_label.height() - 20,
+        )
+        self.preview_worker.result.connect(self.on_preview_ready)
+        self.preview_worker.finished.connect(self.on_preview_finished)
+        self.preview_worker.start()
+
+    def on_preview_ready(self, request_id, out, error):
+        if request_id != self.preview_request_id:
+            if self.preview_pending:
+                self.start_preview_worker()
+            return
+
+        if error:
+            self.log(f"預覽失敗：{error}")
+        elif out is not None:
             self.proc_label.setPixmap(
                 self.pixmap_converter.to_qpixmap(out, self.proc_label.width() - 20, self.proc_label.height() - 20)
             )
             name = Path(self.current_file).name if self.current_file else ""
+            h, w = self.current_img.shape[:2]
             self.info_label.setText(f"影像：{name} | 處理後尺寸={w}x{h} | 僅預覽縮放")
-        except Exception as exc:
-            self.log(f"預覽失敗：{exc}")
+
+        if self.preview_pending:
+            self.start_preview_worker()
+
+    def on_preview_finished(self):
+        worker = self.sender()
+        if worker is self.preview_worker:
+            self.preview_worker = None
+        if worker is not None:
+            worker.deleteLater()
+        if self.preview_pending:
+            self.start_preview_worker()
 
     def start_batch(self):
         self.input_dir = self.input_edit.text().strip()
